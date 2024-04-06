@@ -43,3 +43,6 @@ expo-env.d.ts
 # IDEs
 .idea/
 .vscode/
+
+# Environments
+.env
