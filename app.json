@@ -46,6 +46,12 @@
           "savePhotosPermission": "Allow Odin's Eye to save photos.",
           "isAccessMediaLocationEnabled": true
         }
+      ],
+      [
+        "expo-screen-orientation",
+        {
+          "initialOrientation": "PORTRAIT_UP"
+        }
       ]
     ],
     "experiments": {

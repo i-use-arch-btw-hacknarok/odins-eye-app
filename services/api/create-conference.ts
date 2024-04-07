@@ -1,7 +1,7 @@
 import axios, {AxiosResponse} from "axios";
 import {API} from "@/constants/Api";
 
-export interface CreateConferenceArgs {
+export interface CreateConferenceRequest {
     topic: string;
 };
 
@@ -12,6 +12,6 @@ export interface CreateConferenceResponse {
     updatedAt: string;
 }
 
-export const createConference = async (args: CreateConferenceArgs) => {
-    return await axios.post<CreateConferenceArgs, AxiosResponse<CreateConferenceResponse>>(`${API}/conferences`, args);
+export const createConference = async (args: CreateConferenceRequest) => {
+    return await axios.post<CreateConferenceRequest, AxiosResponse<CreateConferenceResponse>>(`${API}/conferences`, args);
 }

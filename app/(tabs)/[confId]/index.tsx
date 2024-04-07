@@ -1,6 +1,4 @@
-import {StyleSheet, TouchableOpacity} from 'react-native';
-
-import {View} from '@/components/Themed';
+import {Platform, StyleSheet, TouchableOpacity, View} from 'react-native';
 import React, {useEffect, useRef, useState} from "react";
 import {Camera, CameraType} from "expo-camera";
 import * as MediaLibrary from 'expo-media-library';
@@ -11,11 +9,14 @@ import {FlipType, SaveFormat} from "expo-image-manipulator";
 import {detectFaces} from "@/services/api/amazon-rekognition";
 import {calculateAttention} from "@/services/api/calculate-attention";
 import {Buffer} from "buffer";
-import {Canvas, Path, Text, Skia, SkiaView, SkPath, useCanvasRef} from "@shopify/react-native-skia";
-import { useSharedValue } from 'react-native-reanimated';
-import type {TextProps} from "@shopify/react-native-skia/src/dom/types";
+import {Canvas, matchFont, Path, Skia, SkPath, TextPath, useCanvasRef} from "@shopify/react-native-skia";
+import {useSharedValue} from 'react-native-reanimated';
+import FontAwesome from "@expo/vector-icons/FontAwesome";
+import {useGlobalSearchParams, useLocalSearchParams} from "expo-router";
 
-export default function TabOneScreen() {
+export default function CameraScreen() {
+    const params = useLocalSearchParams<{ confId: string }>();
+
     const [type, setType] = useState(CameraType.front);
     const [cameraPermission, requestCameraPermission] = Camera.useCameraPermissions();
     const [mediaPermission, requestMediaPermission] = MediaLibrary.usePermissions();
@@ -26,8 +27,14 @@ export default function TabOneScreen() {
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
     const canvasRef = useCanvasRef()
     const [paths, setPaths] = useState<SkPath[]>([]);
-    const [texts, setTexts] = useState<TextProps[]>([])
-    const canvasSize = useSharedValue({ width: 0, height: 0 });
+    const [texts, setTexts] = useState<{ text: string, path: SkPath }[]>([])
+    const canvasSize = useSharedValue({width: 0, height: 0});
+    const fontFamily = Platform.select({ios: "Helvetica", default: "serif"});
+    const fontStyle = {
+        fontFamily,
+        fontSize: 24,
+    };
+    const skFont = matchFont(fontStyle);
 
     useEffect(() => {
         requestCameraPermission().catch(console.error);
@@ -41,14 +48,17 @@ export default function TabOneScreen() {
             }
 
             intervalRef.current = setInterval(async () => {
-                const picture = await cameraRef.current?.takePictureAsync();
+                const picture = await cameraRef.current?.takePictureAsync({
+                    exif: true,
+                    base64: true,
+                });
 
                 const newWidth = 300;
                 const newHeight = newWidth * picture!.height / picture!.width;
 
                 const image = await ImageManipulator.manipulateAsync(
                     picture!.uri,
-                    [{resize: {width: newWidth, height: newHeight}}, { flip: FlipType.Horizontal }],
+                    [{resize: {width: newWidth, height: newHeight}}, {flip: FlipType.Horizontal}], //
                     {base64: true, format: SaveFormat.JPEG},
                 );
 
@@ -58,7 +68,7 @@ export default function TabOneScreen() {
                 const response = await detectFaces(buffer);
 
                 const paths: SkPath[] = [];
-                const texts: TextProps[] = [];
+                const texts: { text: string, path: SkPath }[] = [];
 
                 for (const faceDetails of response.FaceDetails!) {
                     const attention = calculateAttention(faceDetails);
@@ -68,25 +78,35 @@ export default function TabOneScreen() {
                     const canvasWidth = canvasSize.value.width;
                     const canvasHeight = canvasSize.value.height;
 
+                    const boxLeft = canvasWidth * box.Left! - 20;
+                    const boxTop = canvasHeight * box.Top! - 30;
+                    const boxWidth = canvasWidth * box.Width! + 30;
+                    const boxHeight = canvasHeight * box.Height! + 50;
+
                     const path = Skia.Path.Make();
-                    path.moveTo(box.Left! * canvasWidth, box.Top! * canvasHeight);
-                    path.lineTo(box.Left! * canvasWidth + box.Width! * canvasWidth, box.Top! * canvasHeight);
-                    path.lineTo(box.Left! * canvasWidth + box.Width! * canvasWidth, box.Top! * canvasHeight + box.Height! * canvasHeight);
-                    path.lineTo(box.Left! * canvasWidth, box.Top! * canvasHeight + box.Height! * canvasHeight);
-                    path.lineTo(box.Left! * canvasWidth, box.Top! * canvasHeight);
+                    path.moveTo(boxLeft!, boxTop!);
+                    path.lineTo(boxLeft! + boxWidth!, boxTop!);
+                    path.lineTo(boxLeft! + boxWidth!, boxTop! + boxHeight!);
+                    path.lineTo(boxLeft!, boxTop! + boxHeight!);
+                    path.lineTo(boxLeft!, boxTop!);
                     path.close();
 
                     paths.push(path);
+
+                    const textPath = Skia.Path.Make();
+                    textPath.moveTo(boxLeft!, boxTop!)
+                    textPath.lineTo(boxLeft! + boxWidth! + 200, boxTop!);
+                    textPath.close();
+
                     texts.push({
-                        x: box.Left! * canvasWidth,
-                        y: box.Top! * canvasHeight - 15,
-                        text: `Attention: ${attention.toFixed(0)}%`
+                        text: `Attention: ${attention.toFixed(0)}%`,
+                        path: textPath
                     });
                 }
 
                 setPaths(paths);
                 setTexts(texts);
-            }, 1000);
+            }, 500);
         } else {
             if (intervalRef.current) {
                 clearInterval(intervalRef.current);
@@ -102,15 +122,13 @@ export default function TabOneScreen() {
 
     const startVideoRecording = async () => {
         setRecording(true)
-        const response = await createConference({
-            topic: 'media'
-        });
 
+        // const response = await createConference({ topic: 'media' });
         const video = await cameraRef.current?.recordAsync();
 
         await uploadConferenceVideo({
             videoUri: video!.uri,
-            conferenceId: response.data.id
+            conferenceId: params.confId
         })
     }
 
@@ -119,14 +137,27 @@ export default function TabOneScreen() {
         cameraRef.current?.stopRecording()
     }
 
+    const clearCanvas = () => {
+        setTexts([])
+        setPaths([])
+    }
+
     return (
         <View style={styles.container}>
             <Camera style={styles.camera} type={type} ref={cameraRef}>
                 <View style={styles.buttonsContainer}>
-                    <TouchableOpacity onPress={recording ? stopVideoRecording : startVideoRecording}>
-                        <View
-                            style={[styles.recordButton, recording ? [{backgroundColor: 'red'}] : [{backgroundColor: 'white'}]]}/>
-                    </TouchableOpacity>
+                    <View style={styles.buttonsWrapper}>
+                        <TouchableOpacity onPress={clearCanvas}>
+                            <FontAwesome name={'trash'} style={{width: 36, fontSize: 36}} color={'white'}/>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={recording ? stopVideoRecording : startVideoRecording}>
+                            <View
+                                style={[styles.recordButton, recording ? [{backgroundColor: 'red'}] : [{backgroundColor: 'white'}]]}/>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={toggleCameraType}>
+                            <FontAwesome name={'rotate-right'} style={{width: 36, fontSize: 36}} color={'white'}/>
+                        </TouchableOpacity>
+                    </View>
                 </View>
             </Camera>
             <Canvas ref={canvasRef} style={styles.canvas} pointerEvents="none" onSize={canvasSize}>
@@ -143,7 +174,7 @@ export default function TabOneScreen() {
                 }
                 {
                     texts.map((attention, index) =>
-                        <Text key={index * 2 + 1} {...attention} color={'white'}/>
+                        <TextPath key={index * 2 + 1} {...attention} font={skFont} color={'white'}/>
                     )
                 }
             </Canvas>
@@ -164,13 +195,19 @@ const styles = StyleSheet.create({
     },
     buttonsContainer: {
         flex: 1,
-        flexDirection: 'row-reverse',
+        flexDirection: 'row',
         backgroundColor: 'transparent',
         margin: 36,
         alignItems: 'flex-end',
-        justifyContent: 'center',
         alignContent: 'center',
         alignSelf: 'center',
+    },
+    buttonsWrapper: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: 'transparent'
     },
     flipButton: {
         flex: 1,
@@ -192,6 +229,5 @@ const styles = StyleSheet.create({
         top: 0,
         width: '100%',
         height: '100%',
-        backgroundColor: '#ff000033'
     }
 });

@@ -1,12 +1,12 @@
 import axios from "axios";
 import {API} from "@/constants/Api";
 
-export interface CreateConferenceVideoArgs {
+export interface CreateConferenceVideoRequest {
     videoUri: string;
     conferenceId: string;
 };
 
-export const uploadConferenceVideo = async (args: CreateConferenceVideoArgs) => {
+export const uploadConferenceVideo = async (args: CreateConferenceVideoRequest) => {
     const formData = new FormData();
 
     // @ts-ignore
@@ -17,7 +17,7 @@ export const uploadConferenceVideo = async (args: CreateConferenceVideoArgs) => 
     });
 
     try {
-        return await axios.post<CreateConferenceVideoArgs>(`${API}/conferences/${args.conferenceId}/video`, formData, {
+        return await axios.post<CreateConferenceVideoRequest>(`${API}/conferences/${args.conferenceId}/video`, formData, {
             headers: {
                 'Content-Type': 'multipart/form-data',
             }

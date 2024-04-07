@@ -1,15 +1,15 @@
 import {FaceDetail} from "@aws-sdk/client-rekognition";
 
 const weights = {
-    EyesOpen: 0.5,
-    EyeDirection: 0,
-    MouthOpen: 0.2,
-    Smile: 0.4,
+    EyesOpen: 0.4,
+    EyeDirection: 0.1,
+    MouthOpen: 0.1,
+    Smile: 0.1,
     PosePitch: 0,
     PoseYaw: 0,
     PoseRoll: 0,
-    Calm: 0,
-    Sad: 0,
+    Calm: 0.4,
+    Sad: 0.2,
     Confused: 0,
     Angry: 0,
     Disgusted: 0,
@@ -28,8 +28,8 @@ export const transformInRange = (x: number, from: [number, number], to: [number,
 };
 
 
-const FOCUSED_EMOTIONS = ['HAPPY', 'ANGRY', 'CONFUSED', 'DISGUSTED', ];
-const NOT_FOCUSED_EMOTIONS = ['CALM', 'SAD', 'SURPRISED', 'FEAR'];
+// const FOCUSED_EMOTIONS = ['HAPPY', 'ANGRY', 'CONFUSED', 'DISGUSTED', ];
+// const NOT_FOCUSED_EMOTIONS = ['CALM', 'SAD', 'SURPRISED', 'FEAR'];
 
 const toStudlyCase = (str: string) => {
     if (str.length === 0) return str;
@@ -42,6 +42,8 @@ export const calculateAttention = (emotions: FaceDetail) => {
         if (key === 'EyesOpen' || key === 'MouthOpen' || key === 'Smile') {
             const factor = value.Value ? 1 : 0.05;
             acc += value.Confidence * weights[key] * factor;
+        } else if (key === 'EyeDirection') {
+            acc += (1 - transformInRange(Math.abs(value.Yaw) + Math.abs(value.Pitch), [0, 45], [0, 1])) * weights.EyeDirection * value.Confidence;
         } else if (key === 'Pose') {
             acc += transformInRange(value.Pitch, [-90, 90], [0, 1]) * weights.PosePitch;
             acc += transformInRange(value.Yaw, [-90, 90], [0, 1]) * weights.PoseYaw;
@@ -49,7 +51,7 @@ export const calculateAttention = (emotions: FaceDetail) => {
         } else if (key === 'Emotions') {
             for (const emotion of value) {
                 const key = toStudlyCase(emotion.Type) as keyof typeof weights;
-                const factor = FOCUSED_EMOTIONS.includes(key.toUpperCase()) ? 1 : -1;
+                const factor = 1; // FOCUSED_EMOTIONS.includes(key.toUpperCase()) ? 1 : -1;
                 acc += emotion.Confidence * weights[key] * factor;
             }
         }
